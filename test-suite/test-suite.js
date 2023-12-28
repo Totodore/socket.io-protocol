@@ -524,22 +524,22 @@ describe("Socket.IO protocol", () => {
 		const DATA = '{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}';
 
 		socket.send(`452-["emit-with-ack",${DATA}]`);
-		socket.send(Uint8Array.from([1, 2, 3]));
-		socket.send(Uint8Array.from([4, 5, 6]));
+		socket.send(Uint8Array.from([4, 1, 2, 3]));
+		socket.send(Uint8Array.from([4, 4, 5, 6]));
 
 	    let packets = await waitForPackets(socket, 3);
 		expect(packets[0]).to.eql(`452-1["emit-with-ack",${DATA}]`)
-		expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-		expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
+		expect(packets[1]).to.eql(Uint8Array.from([4, 1, 2, 3]).buffer);
+		expect(packets[2]).to.eql(Uint8Array.from([4, 4, 5, 6]).buffer);
 
 		socket.send(`462-1[${DATA}]`);
-		socket.send(Uint8Array.from([1, 2, 3]));
-		socket.send(Uint8Array.from([4, 5, 6]));
+		socket.send(Uint8Array.from([4, 1, 2, 3]));
+		socket.send(Uint8Array.from([4, 4, 5, 6]));
 
 	    packets = await waitForPackets(socket, 3);
 		expect(packets[0]).to.eql(`452-["emit-with-ack",${DATA}]`)
-		expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-		expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
+		expect(packets[1]).to.eql(Uint8Array.from([4, 1, 2, 3]).buffer);
+		expect(packets[2]).to.eql(Uint8Array.from([4, 4, 5, 6]).buffer);
 	});
   });
 
