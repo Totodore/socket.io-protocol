@@ -1,3 +1,4 @@
+import { decode, encode } from "notepack.io";
 const isNodejs = typeof window === "undefined";
 
 if (isNodejs) {
@@ -75,7 +76,7 @@ async function initSocketIOConnection() {
 
   await waitFor(socket, "message"); // Engine.IO handshake
 
-  socket.send("40");
+  socket.send(encode({ type: 0, nsp: "/" }));
 
   await waitFor(socket, "message"); // Socket.IO handshake
   await waitFor(socket, "message"); // "auth" packet
@@ -410,20 +411,17 @@ describe("Socket.IO protocol", () => {
 
       await waitFor(socket, "message"); // Engine.IO handshake
 
-      socket.send("40");
+      socket.send(encode({ type: 0, nsp: "/" }));
 
       const { data } = await waitFor(socket, "message");
+      const handshake = decode(data);
+      expect(handshake).to.have.all.keys("data", "type", "nsp");
+      expect(handshake.data.sid).to.be.a("string");
+      expect(handshake.type).to.eq(0);
+      expect(handshake.nsp).to.eq("/");
 
-      expect(data).to.startsWith("40");
-
-      const handshake = JSON.parse(data.substring(2));
-
-      expect(handshake).to.have.all.keys("sid");
-      expect(handshake.sid).to.be.a("string");
-
-      const authPacket = await waitFor(socket, "message");
-
-      expect(authPacket.data).to.eql('42["auth",{}]');
+      const authPacket = decode((await waitFor(socket, "message")).data);
+      expect(authPacket).to.eql({ type: 2, nsp: "/", data: ["auth", {}] });
     });
 
     it("should allow connection to the main namespace with a payload", async () => {
@@ -433,20 +431,21 @@ describe("Socket.IO protocol", () => {
 
       await waitFor(socket, "message"); // Engine.IO handshake
 
-      socket.send('40{"token":"123"}');
+      socket.send(encode({ type: 0, nsp: "/", data: { token: "123" } }));
 
       const { data } = await waitFor(socket, "message");
+      const handshake = decode(data);
+      expect(handshake).to.have.all.keys("data", "type", "nsp");
+      expect(handshake.data.sid).to.be.a("string");
+      expect(handshake.type).to.eq(0);
+      expect(handshake.nsp).to.eq("/");
 
-      expect(data).to.startsWith("40");
-
-      const handshake = JSON.parse(data.substring(2));
-
-      expect(handshake).to.have.all.keys("sid");
-      expect(handshake.sid).to.be.a("string");
-
-      const authPacket = await waitFor(socket, "message");
-
-      expect(authPacket.data).to.eql('42["auth",{"token":"123"}]');
+      const authPacket = decode((await waitFor(socket, "message")).data);
+      expect(authPacket).to.eql({
+        type: 2,
+        nsp: "/",
+        data: ["auth", { token: "123" }],
+      });
     });
 
     it("should allow connection to a custom namespace", async () => {
@@ -455,21 +454,21 @@ describe("Socket.IO protocol", () => {
       );
 
       await waitFor(socket, "message"); // Engine.IO handshake
-
-      socket.send("40/custom,");
+      socket.send(encode({ type: 0, nsp: "/custom" }));
 
       const { data } = await waitFor(socket, "message");
+      const handshake = decode(data);
+      expect(handshake).to.have.all.keys("data", "type", "nsp");
+      expect(handshake.data.sid).to.be.a("string");
+      expect(handshake.type).to.eq(0);
+      expect(handshake.nsp).to.eq("/custom");
 
-      expect(data).to.startsWith("40/custom,");
-
-      const handshake = JSON.parse(data.substring(10));
-
-      expect(handshake).to.have.all.keys("sid");
-      expect(handshake.sid).to.be.a("string");
-
-      const authPacket = await waitFor(socket, "message");
-
-      expect(authPacket.data).to.eql('42/custom,["auth",{}]');
+      const authPacket = decode((await waitFor(socket, "message")).data);
+      expect(authPacket).to.eql({
+        type: 2,
+        nsp: "/custom",
+        data: ["auth", {}],
+      });
     });
 
     it("should allow connection to a custom namespace with a payload", async () => {
@@ -478,21 +477,21 @@ describe("Socket.IO protocol", () => {
       );
 
       await waitFor(socket, "message"); // Engine.IO handshake
-
-      socket.send('40/custom,{"token":"abc"}');
+      socket.send(encode({ type: 0, nsp: "/custom", data: { token: "abc" } }));
 
       const { data } = await waitFor(socket, "message");
+      const handshake = decode(data);
+      expect(handshake).to.have.all.keys("data", "type", "nsp");
+      expect(handshake.data.sid).to.be.a("string");
+      expect(handshake.type).to.eq(0);
+      expect(handshake.nsp).to.eq("/custom");
 
-      expect(data).to.startsWith("40/custom,");
-
-      const handshake = JSON.parse(data.substring(10));
-
-      expect(handshake).to.have.all.keys("sid");
-      expect(handshake.sid).to.be.a("string");
-
-      const authPacket = await waitFor(socket, "message");
-
-      expect(authPacket.data).to.eql('42/custom,["auth",{"token":"abc"}]');
+      const authPacket = decode((await waitFor(socket, "message")).data);
+      expect(authPacket).to.eql({
+        type: 2,
+        nsp: "/custom",
+        data: ["auth", { token: "abc" }],
+      });
     });
 
     it("should disallow connection to an unknown namespace", async () => {
@@ -501,12 +500,15 @@ describe("Socket.IO protocol", () => {
       );
 
       await waitFor(socket, "message"); // Engine.IO handshake
+      socket.send(encode({ type: 0, nsp: "/random" }));
 
-      socket.send("40/random");
-
-      const { data } = await waitFor(socket, "message");
-
-      expect(data).to.eql('44/random,{"message":"Invalid namespace"}');
+      const msg = await waitFor(socket, "message");
+      const data = decode(msg.data);
+      expect(data).to.eql({
+        type: 4,
+        nsp: "/random",
+        data: { message: "Invalid namespace" },
+      });
     });
 
     it("should disallow connection with an invalid handshake", async () => {
@@ -516,7 +518,7 @@ describe("Socket.IO protocol", () => {
 
       await waitFor(socket, "message"); // Engine.IO handshake
 
-      socket.send("4abc");
+      socket.send(new Uint8Array([4, "a", "b", "c"]));
 
       await waitFor(socket, "close");
     });
@@ -526,10 +528,9 @@ describe("Socket.IO protocol", () => {
     it("should disconnect from the main namespace", async () => {
       const socket = await initSocketIOConnection();
 
-      socket.send("41");
+      socket.send(encode({ type: 1, nsp: "/" }));
 
       const { data } = await waitFor(socket, "message");
-
       expect(data).to.eql("2");
     });
 
@@ -537,125 +538,188 @@ describe("Socket.IO protocol", () => {
       const socket = await initSocketIOConnection();
 
       await waitFor(socket, "message"); // ping
-
-      socket.send("40/custom");
+      socket.send(encode({ type: 0, nsp: "/custom" }));
 
       await waitFor(socket, "message"); // Socket.IO handshake
       await waitFor(socket, "message"); // auth packet
-
-      socket.send("41/custom");
-      socket.send('42["message","message to main namespace"]');
-
-      const { data } = await waitFor(socket, "message");
-
-      expect(data).to.eql('42["message-back","message to main namespace"]');
+      socket.send(encode({ type: 1, nsp: "/custom" }));
+      socket.send(
+        encode({
+          type: 2,
+          nsp: "/",
+          data: ["message", "message to main namespace"],
+        })
+      );
+      const a = await waitFor(socket, "message");
+      const data = decode(Buffer.from(a.data));
+      expect(data).to.eql({
+        type: 2,
+        nsp: "/",
+        data: ["message-back", "message to main namespace"],
+      });
     });
   });
 
   describe("acknowledgements", () => {
-	it("should emit with an ack expectation", async () => {
-		const socket = await initSocketIOConnection();
+    it("should emit with an ack expectation", async () => {
+      const socket = await initSocketIOConnection();
+      socket.send(
+        encode({
+          type: 2,
+          nsp: "/",
+          data: ["emit-with-ack", 1, "2", { 3: [true] }],
+        })
+      );
 
-	  	socket.send('42["emit-with-ack",1,"2",{"3":[true]}]');
-		
-		const { data } = await waitFor(socket, "message");  
-		expect(data).to.eql('421["emit-with-ack",1,"2",{"3":[true]}]')
-		socket.send('431[1,"2",{"3":[true]}]');
-		
-		const { data: data2 } = await waitFor(socket, "message");
-		expect(data2).to.eql('42["emit-with-ack",1,"2",{"3":[true]}]')
-	});
+      const data = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(data).to.eql({
+        type: 2,
+        nsp: "/",
+        id: 1,
+        data: ["emit-with-ack", 1, "2", { 3: [true] }],
+      });
+      socket.send(
+        encode({ type: 3, nsp: "/", id: 1, data: [1, "2", { 3: [true] }] })
+      );
 
-	it("should emit with a binary ack expectation", async () => {
-		const socket = await initSocketIOConnection();
-		const DATA = '{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}';
+      const data2 = decode(
+        Buffer.from((await waitFor(socket, "message")).data)
+      );
+      expect(data2).to.eql({
+        type: 2,
+        nsp: "/",
+        data: ["emit-with-ack", 1, "2", { 3: [true] }],
+      });
+    });
 
-		socket.send(`452-["emit-with-ack",${DATA}]`);
-		socket.send(Uint8Array.from([1, 2, 3]));
-		socket.send(Uint8Array.from([4, 5, 6]));
+    it("should emit with a binary ack expectation", async () => {
+      const socket = await initSocketIOConnection();
+      const BINS = [Buffer.from([1, 2, 3]), Buffer.from([4, 5, 6])];
+      socket.send(
+        encode({
+          type: 5,
+          attachments: 2,
+          nsp: "/",
+          data: ["emit-with-ack", ...BINS],
+        })
+      );
 
-	    let packets = await waitForPackets(socket, 3);
-		expect(packets[0]).to.eql(`452-1["emit-with-ack",${DATA}]`)
-		expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-		expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
+      let packet = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(packet).to.eql({
+        type: 5,
+        nsp: "/",
+        attachments: 2,
+        id: 1,
+        data: ["emit-with-ack", ...BINS],
+      });
 
-		socket.send(`462-1[${DATA}]`);
-		socket.send(Uint8Array.from([1, 2, 3]));
-		socket.send(Uint8Array.from([4, 5, 6]));
+      socket.send(
+        encode({ type: 6, nsp: "/", attachments: 2, id: 1, data: BINS })
+      );
 
-	    packets = await waitForPackets(socket, 3);
-		expect(packets[0]).to.eql(`452-["emit-with-ack",${DATA}]`)
-		expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-		expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
-	});
+      packet = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(packet).to.eql({
+        type: 5,
+        attachments: 2,
+        nsp: "/",
+        data: ["emit-with-ack", ...BINS],
+      });
+    });
   });
-
 
   describe("message", () => {
     it("should send a plain-text packet", async () => {
       const socket = await initSocketIOConnection();
 
-      socket.send('42["message",1,"2",{"3":[true]}]');
+      socket.send(
+        encode({
+          type: 2,
+          nsp: "/",
+          data: ["message", 1, "2", { 3: [true] }],
+        })
+      );
 
-      const { data } = await waitFor(socket, "message");
-
-      expect(data).to.eql('42["message-back",1,"2",{"3":[true]}]');
+      const data = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(data).to.eql({
+        type: 2,
+        nsp: "/",
+        data: ["message-back", 1, "2", { 3: [true] }],
+      });
     });
 
     it("should send a packet with binary attachments", async () => {
       const socket = await initSocketIOConnection();
+      const BINS = [Buffer.from([1, 2, 3]), Buffer.from([4, 5, 6])];
 
       socket.send(
-        '452-["message",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'
+        encode({
+          type: 5,
+          nsp: "/",
+          attachments: 2,
+          data: ["message", ...BINS],
+        })
       );
-      socket.send(Uint8Array.from([1, 2, 3]));
-      socket.send(Uint8Array.from([4, 5, 6]));
-
-      const packets = await waitForPackets(socket, 3);
-
-      expect(packets[0]).to.eql(
-        '452-["message-back",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'
-      );
-      expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-      expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
+      const data = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(data).to.eql({
+        type: 5,
+        attachments: 2,
+        nsp: "/",
+        data: ["message-back", ...BINS],
+      });
 
       socket.close();
     });
 
     it("should send a plain-text packet with an ack", async () => {
       const socket = await initSocketIOConnection();
+      socket.send(
+        encode({
+          type: 2,
+          id: 456,
+          nsp: "/",
+          data: ["message-with-ack", 1, "2", { 3: [false] }],
+        })
+      );
 
-      socket.send('42456["message-with-ack",1,"2",{"3":[false]}]');
-
-      const { data } = await waitFor(socket, "message");
-
-      expect(data).to.eql('43456[1,"2",{"3":[false]}]');
+      const data = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(data).to.eql({
+        type: 3,
+        id: 456,
+        nsp: "/",
+        data: [1, "2", { 3: [false] }],
+      });
     });
 
     it("should send a packet with binary attachments and an ack", async () => {
       const socket = await initSocketIOConnection();
+      const BINS = [Buffer.from([1, 2, 3]), Buffer.from([4, 5, 6])];
 
       socket.send(
-        '452-789["message-with-ack",{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'
+        encode({
+          type: 5,
+          nsp: "/",
+          attachments: 2,
+          id: 789,
+          data: ["message-with-ack", ...BINS],
+        })
       );
-      socket.send(Uint8Array.from([1, 2, 3]));
-      socket.send(Uint8Array.from([4, 5, 6]));
 
-      const packets = await waitForPackets(socket, 3);
-
-      expect(packets[0]).to.eql(
-        '462-789[{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}]'
-      );
-      expect(packets[1]).to.eql(Uint8Array.from([1, 2, 3]).buffer);
-      expect(packets[2]).to.eql(Uint8Array.from([4, 5, 6]).buffer);
+      const data = decode(Buffer.from((await waitFor(socket, "message")).data));
+      expect(data).to.eql({
+        type: 6,
+        id: 789,
+        data: BINS,
+        nsp: "/",
+        attachments: 2,
+      });
 
       socket.close();
     });
 
     it("should close the connection upon invalid format (unknown packet type)", async () => {
       const socket = await initSocketIOConnection();
-
       socket.send("4abc");
+      socket.send(Buffer.from([1, 2, 3, 4]));
 
       await waitFor(socket, "close");
     });
