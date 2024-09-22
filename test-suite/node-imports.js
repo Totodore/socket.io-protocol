@@ -1,4 +1,3 @@
-import fetch from "node-fetch";
 import { WebSocket, createWebSocketStream } from "ws";
 import chai from "chai";
 import chaiString from "chai-string";
@@ -29,6 +28,5 @@ class WebSocketStream extends WebSocket {
 
 chai.use(chaiString);
 
-globalThis.fetch = fetch;
 globalThis.WebSocket = WebSocketStream;
 globalThis.chai = chai;
