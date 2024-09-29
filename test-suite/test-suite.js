@@ -411,7 +411,7 @@ describe("Socket.IO protocol", () => {
 
       await waitFor(socket, "message"); // Engine.IO handshake
 
-      socket.send(encode({ type: 0, nsp: "/" }));
+      socket.send(encode({ type: 0, nsp: "/", data: undefined }));
 
       const { data } = await waitFor(socket, "message");
       const handshake = decode(data);
@@ -421,7 +421,7 @@ describe("Socket.IO protocol", () => {
       expect(handshake.nsp).to.eq("/");
 
       const authPacket = decode((await waitFor(socket, "message")).data);
-      expect(authPacket).to.eql({ type: 2, nsp: "/", data: ["auth", {}] });
+      expect(authPacket).to.eql({ type: 2, nsp: "/", data: ["auth", null] });
     });
 
     it("should allow connection to the main namespace with a payload", async () => {
@@ -467,7 +467,7 @@ describe("Socket.IO protocol", () => {
       expect(authPacket).to.eql({
         type: 2,
         nsp: "/custom",
-        data: ["auth", {}],
+        data: ["auth", null],
       });
     });
 
@@ -547,7 +547,7 @@ describe("Socket.IO protocol", () => {
         encode({
           type: 2,
           nsp: "/",
-          data: ["message", "message to main namespace"],
+          data: ["message", "message to main namespace", "test", 1],
         })
       );
       const a = await waitFor(socket, "message");
@@ -555,7 +555,7 @@ describe("Socket.IO protocol", () => {
       expect(data).to.eql({
         type: 2,
         nsp: "/",
-        data: ["message-back", "message to main namespace"],
+        data: ["message-back", "message to main namespace", "test", 1],
       });
     });
   });
@@ -597,32 +597,29 @@ describe("Socket.IO protocol", () => {
       const BINS = [Buffer.from([1, 2, 3]), Buffer.from([4, 5, 6])];
       socket.send(
         encode({
-          type: 5,
-          attachments: 2,
+          type: 2,
           nsp: "/",
-          data: ["emit-with-ack", ...BINS],
+          data: ["emit-with-ack", ...BINS, "test"],
         })
       );
 
       let packet = decode(Buffer.from((await waitFor(socket, "message")).data));
       expect(packet).to.eql({
-        type: 5,
+        type: 2,
         nsp: "/",
-        attachments: 2,
         id: 1,
-        data: ["emit-with-ack", ...BINS],
+        data: ["emit-with-ack", ...BINS, "test"],
       });
 
       socket.send(
-        encode({ type: 6, nsp: "/", attachments: 2, id: 1, data: BINS })
+        encode({ type: 3, nsp: "/", id: 1, data: [...BINS, "test"] })
       );
 
       packet = decode(Buffer.from((await waitFor(socket, "message")).data));
       expect(packet).to.eql({
-        type: 5,
-        attachments: 2,
+        type: 2,
         nsp: "/",
-        data: ["emit-with-ack", ...BINS],
+        data: ["emit-with-ack", ...BINS, "test"],
       });
     });
   });
@@ -653,18 +650,16 @@ describe("Socket.IO protocol", () => {
 
       socket.send(
         encode({
-          type: 5,
+          type: 2,
           nsp: "/",
-          attachments: 2,
-          data: ["message", ...BINS],
+          data: ["message", ...BINS, "test"],
         })
       );
       const data = decode(Buffer.from((await waitFor(socket, "message")).data));
       expect(data).to.eql({
-        type: 5,
-        attachments: 2,
+        type: 2,
         nsp: "/",
-        data: ["message-back", ...BINS],
+        data: ["message-back", ...BINS, "test"],
       });
 
       socket.close();
@@ -696,21 +691,19 @@ describe("Socket.IO protocol", () => {
 
       socket.send(
         encode({
-          type: 5,
+          type: 2,
           nsp: "/",
-          attachments: 2,
           id: 789,
-          data: ["message-with-ack", ...BINS],
+          data: ["message-with-ack", ...BINS, "test"],
         })
       );
 
       const data = decode(Buffer.from((await waitFor(socket, "message")).data));
       expect(data).to.eql({
-        type: 6,
+        type: 3,
         id: 789,
-        data: BINS,
+        data: [...BINS, "test"],
         nsp: "/",
-        attachments: 2,
       });
 
       socket.close();
