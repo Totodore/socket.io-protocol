@@ -569,7 +569,7 @@ describe("Socket.IO protocol", () => {
     it("should emit with a binary ack expectation", async () => {
       const socket = await initSocketIOConnection();
       const DATA =
-        '{"_placeholder":true,"num":0},{"_placeholder":true,"num":1}';
+        '{"_placeholder":true,"num":0},{"_placeholder":true,"num":1},"test"';
 
       socket.send(`452-["emit-with-ack",1,${DATA}]`);
       socket.send(Uint8Array.from([1, 2, 3]));
